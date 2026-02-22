@@ -160,7 +160,7 @@ python browser_api.py --host 127.0.0.1 --port 8081
 
 API details for the UI build agent:
 
-- `/home/runner/work/pub-sub-tools/pub-sub-tools/backlog-clearer/docs/message-browser-api.md`
+- `backlog-clearer/docs/message-browser-api.md`
 
 ## Project layout
 

@@ -1,6 +1,6 @@
 # Message Browser Backend API
 
-The backend service is implemented in `/home/runner/work/pub-sub-tools/pub-sub-tools/backlog-clearer/browser_api.py`.
+The backend service is implemented in `backlog-clearer/browser_api.py`.
 
 Run it locally:
 
