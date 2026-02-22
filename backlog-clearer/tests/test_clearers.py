@@ -59,7 +59,7 @@ _pulsar_stub = _stub_module(
     Client=MagicMock(),
     AuthenticationToken=MagicMock(),
     ConsumerType=MagicMock(Shared="Shared"),
-    BatchReceivePolicy=MagicMock(),
+    ConsumerBatchReceivePolicy=MagicMock(),
     Timeout=type("Timeout", (Exception,), {}),
 )
 sys.modules.setdefault("pulsar", _pulsar_stub)
@@ -284,7 +284,7 @@ class TestPulsarClearer:
 
         mock_consumer = MagicMock()
         mock_consumer.batch_receive.side_effect = fake_batch_receive
-        mock_consumer.acknowledge_cumulative = MagicMock()
+        mock_consumer.acknowledge = MagicMock()
         mock_consumer.close = MagicMock()
 
         mock_client = MagicMock()
@@ -295,7 +295,7 @@ class TestPulsarClearer:
             mock_pulsar_module.Client.return_value = mock_client
             mock_pulsar_module.AuthenticationToken = MagicMock()
             mock_pulsar_module.ConsumerType.Shared = "Shared"
-            mock_pulsar_module.BatchReceivePolicy = MagicMock()
+            mock_pulsar_module.ConsumerBatchReceivePolicy = MagicMock()
             mock_pulsar_module.Timeout = _pulsar_stub.Timeout
 
             clearer = PulsarClearer(config)
