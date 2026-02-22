@@ -128,10 +128,9 @@ class PulsarClearer(BaseClearer):
         subscription = self.config.get("subscription", "backlog-clearer")
 
         policy = pulsar.ConsumerType.Shared
-        batch_policy = pulsar.BatchReceivePolicy(
-            max_num_messages=batch_size,
-            timeout_ms=1_000,
-        )
+        # ConsumerBatchReceivePolicy(max_num_messages, max_num_bytes, timeout_ms)
+        # max_num_bytes = -1 means no byte limit; timeout_ms = 1 000 ms.
+        batch_policy = pulsar.ConsumerBatchReceivePolicy(batch_size, -1, 1_000)
 
         consumer = client.subscribe(
             self.config["topic"],
@@ -163,9 +162,11 @@ class PulsarClearer(BaseClearer):
                 consecutive_empty = 0
                 count = len(msgs)
 
-                # Cumulative ack on the last message of the batch —
-                # cheaper than individual acks.
-                consumer.acknowledge_cumulative(msgs[-1])
+                # Acknowledge each message individually — required for Shared
+                # subscriptions (cumulative ack is only allowed on Exclusive/
+                # Failover subscriptions).
+                for msg in msgs:
+                    consumer.acknowledge(msg)
                 self._counter.add(count)
 
         except Exception as exc:  # noqa: BLE001
