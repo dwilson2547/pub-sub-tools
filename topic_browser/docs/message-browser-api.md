@@ -1,11 +1,11 @@
 # Message Browser Backend API
 
-The backend service is implemented in `backlog-clearer/browser_api.py`.
+The backend service is implemented in `topic_browser/browser_api.py`.
 
 Run it locally:
 
 ```bash
-python browser_api.py --host 127.0.0.1 --port 8081
+python topic_browser/browser_api.py --host 127.0.0.1 --port 8081
 ```
 
 Base URL: `http://127.0.0.1:8081/api/v1`

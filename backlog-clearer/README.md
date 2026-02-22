@@ -144,24 +144,6 @@ pip install pytest pytest-asyncio
 pytest
 ```
 
-## Message browser backend API
-
-This tool suite now includes a lightweight backend API for a browser UI that
-can connect to pub-sub systems, list topics, and pull messages in either:
-
-- `peek` mode (read without consuming from the active feed)
-- `consume` mode (remove/commit messages from the feed)
-
-Run it:
-
-```bash
-python browser_api.py --host 127.0.0.1 --port 8081
-```
-
-API details for the UI build agent:
-
-- `backlog-clearer/docs/message-browser-api.md`
-
 ## Project layout
 
 ```
