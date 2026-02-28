@@ -1,0 +1,19 @@
+replicaCount: 1
+
+image:
+  repository: topic-browser
+  pullPolicy: IfNotPresent
+  # Defaults to .Chart.AppVersion when left empty
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 8081
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
