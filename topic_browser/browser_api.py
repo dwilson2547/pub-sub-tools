@@ -3,6 +3,7 @@
 Lightweight HTTP backend for browsing pub-sub messages.
 
 Endpoints:
+- GET  /                                         (management UI)
 - GET  /api/v1/systems
 - POST /api/v1/connections
 - GET  /api/v1/connections
@@ -15,12 +16,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import threading
 import uuid
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
+
+_UI_FILE = os.path.join(os.path.dirname(__file__), "browser_ui.html")
 
 
 class ConnectorError(RuntimeError):
@@ -239,7 +243,16 @@ class ConnectionManager:
 class BrowserAPIHandler(BaseHTTPRequestHandler):
     manager = ConnectionManager()
 
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self._cors_headers()
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
+        if self.path in ("/", ""):
+            self._serve_ui()
+            return
+
         if self.path == "/api/v1/systems":
             self._json(HTTPStatus.OK, {"systems": ["memory", "kafka"]})
             return
@@ -347,6 +360,25 @@ class BrowserAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
         return
 
+    def _serve_ui(self) -> None:
+        try:
+            with open(_UI_FILE, "rb") as f:
+                data = f.read()
+        except OSError:
+            self._json(HTTPStatus.NOT_FOUND, {"error": f"UI file not found: {_UI_FILE}"})
+            return
+        self.send_response(HTTPStatus.OK)
+        self._cors_headers()
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
     def _read_json_body(self) -> Optional[Dict[str, Any]]:
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
@@ -364,6 +396,7 @@ class BrowserAPIHandler(BaseHTTPRequestHandler):
     def _json(self, status: HTTPStatus, payload: Dict[str, Any]) -> None:
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
+        self._cors_headers()
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -373,6 +406,7 @@ class BrowserAPIHandler(BaseHTTPRequestHandler):
 def run_server(host: str = "127.0.0.1", port: int = 8081) -> None:
     server = ThreadingHTTPServer((host, port), BrowserAPIHandler)
     print(f"message-browser-api listening on http://{host}:{port}")
+    print(f"  UI: http://{host}:{port}/")
     server.serve_forever()
 
 

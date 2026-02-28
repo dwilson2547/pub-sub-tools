@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pub-Sub Topic Browser</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sidebar-w: 240px;
+      --topics-w: 220px;
+      --header-h: 52px;
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --border: #dde1e7;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --text: #1e293b;
+      --muted: #64748b;
+      --pill-bg: #eff6ff;
+      --pill-text: #1d4ed8;
+      --row-hover: #f8faff;
+      --tag-peek: #d1fae5;
+      --tag-peek-text: #065f46;
+      --tag-consume: #fee2e2;
+      --tag-consume-text: #991b1b;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────── */
+    header {
+      height: var(--header-h);
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      flex-shrink: 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,.15);
+    }
+    header svg { flex-shrink: 0; }
+    header h1 { font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
+
+    /* ── Main layout ─────────────────────────────────── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .sidebar-header {
+      padding: 14px 16px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header span {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .sidebar-body { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+    .conn-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px 8px 14px;
+      cursor: pointer;
+      gap: 10px;
+      border-left: 3px solid transparent;
+      transition: background .1s;
+    }
+    .conn-item:hover { background: var(--row-hover); }
+    .conn-item.active {
+      background: var(--pill-bg);
+      border-left-color: var(--accent);
+    }
+    .conn-item .conn-info { flex: 1; min-width: 0; }
+    .conn-item .conn-system {
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .conn-item .conn-id {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .conn-item .btn-icon {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+      opacity: 0;
+      transition: opacity .15s, color .15s;
+    }
+    .conn-item:hover .btn-icon,
+    .conn-item.active .btn-icon { opacity: 1; }
+    .conn-item .btn-icon:hover { color: var(--danger); background: #fee2e2; }
+
+    .sidebar-footer { padding: 10px 12px; border-top: 1px solid var(--border); }
+
+    /* ── Topics panel ────────────────────────────────── */
+    .topics-panel {
+      width: var(--topics-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .panel-header {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-header span {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      color: var(--muted);
+      flex: 1;
+    }
+    .panel-body { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+    .topic-item {
+      padding: 8px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 13px;
+      border-left: 3px solid transparent;
+      transition: background .1s;
+    }
+    .topic-item:hover { background: var(--row-hover); }
+    .topic-item.active {
+      background: var(--pill-bg);
+      border-left-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .empty-hint {
+      padding: 20px 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    /* ── Messages panel ──────────────────────────────── */
+    .messages-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .msg-toolbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    .msg-toolbar .topic-badge {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text);
+      margin-right: 4px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .msg-toolbar .topic-badge .label { color: var(--muted); font-weight: 400; font-size: 12px; }
+    .toolbar-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    label.ctrl-label { font-size: 12px; color: var(--muted); }
+    select.ctrl-select, input.ctrl-input {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+    }
+    select.ctrl-select:focus, input.ctrl-input:focus { border-color: var(--accent); }
+    input.ctrl-input { width: 68px; }
+
+    .msg-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
+
+    /* messages table */
+    .msg-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .msg-table thead tr { background: #f8fafc; }
+    .msg-table th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .msg-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      font-size: 13px;
+    }
+    .msg-table tbody tr:last-child td { border-bottom: none; }
+    .msg-table tbody tr:hover td { background: var(--row-hover); }
+
+    .msg-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+    .msg-payload {
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .msg-meta { font-family: monospace; font-size: 11px; color: var(--muted); white-space: pre-wrap; }
+
+    .expand-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--accent);
+      font-size: 11px;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .expand-btn:hover { background: var(--pill-bg); }
+
+    /* mode tag */
+    .mode-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+    .mode-tag.peek { background: var(--tag-peek); color: var(--tag-peek-text); }
+    .mode-tag.consume { background: var(--tag-consume); color: var(--tag-consume-text); }
+
+    .results-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+    }
+    .results-bar .count-text { font-size: 13px; color: var(--muted); flex: 1; }
+
+    /* placeholder / spinner */
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--muted);
+      gap: 12px;
+      text-align: center;
+      padding: 40px;
+    }
+    .placeholder svg { opacity: .3; }
+    .placeholder p { font-size: 14px; line-height: 1.6; }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Buttons ─────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { background: #93c5fd; cursor: default; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-outline {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover { background: var(--row-hover); }
+
+    /* ── Modal ───────────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.4);
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 24px;
+      width: 460px;
+      max-width: calc(100vw - 32px);
+      box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    }
+    .modal h2 { font-size: 16px; margin-bottom: 18px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+    .form-group select,
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+      font-family: inherit;
+    }
+    .form-group select:focus,
+    .form-group input:focus,
+    .form-group textarea:focus { border-color: var(--accent); }
+    .form-group textarea { resize: vertical; min-height: 90px; font-family: monospace; font-size: 12px; }
+    .form-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .form-error { font-size: 12px; color: var(--danger); margin-top: 8px; }
+
+    /* ── Toast ───────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #1e293b;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity .2s, transform .2s;
+      z-index: 9999;
+      pointer-events: none;
+      max-width: 340px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* scrollbar styling */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+  </svg>
+  <h1>Pub-Sub Topic Browser</h1>
+</header>
+
+<!-- Layout -->
+<div class="layout">
+
+  <!-- Sidebar: connections -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span>Connections</span>
+    </div>
+    <div class="sidebar-body" id="conn-list">
+      <div class="empty-hint">No connections yet.<br/>Add one below.</div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn btn-primary btn-sm" style="width:100%" onclick="openAddConn()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Connection
+      </button>
+    </div>
+  </aside>
+
+  <!-- Topics panel -->
+  <div class="topics-panel">
+    <div class="panel-header">
+      <span>Topics</span>
+      <button class="btn btn-outline btn-sm" id="refresh-topics-btn" onclick="refreshTopics()" title="Refresh topics" style="display:none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+    </div>
+    <div class="panel-body" id="topic-list">
+      <div class="empty-hint">Select a connection to view topics.</div>
+    </div>
+  </div>
+
+  <!-- Messages panel -->
+  <div class="messages-panel">
+    <div class="msg-toolbar" id="msg-toolbar" style="display:none">
+      <div class="topic-badge" id="toolbar-topic-name"></div>
+      <div class="toolbar-controls">
+        <label class="ctrl-label" for="ctrl-max">Max</label>
+        <input class="ctrl-input" type="number" id="ctrl-max" value="25" min="1" max="1000" />
+        <label class="ctrl-label" for="ctrl-mode">Mode</label>
+        <select class="ctrl-select" id="ctrl-mode">
+          <option value="peek">peek</option>
+          <option value="consume">consume</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="pull-btn" onclick="pullMessages()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          Pull
+        </button>
+      </div>
+    </div>
+
+    <div class="msg-body" id="msg-body">
+      <div class="placeholder" id="msg-placeholder">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>Select a connection and topic,<br/>then press <strong>Pull</strong> to view messages.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Add Connection Modal -->
+<div class="modal-overlay" id="modal-add-conn">
+  <div class="modal">
+    <h2>Add Connection</h2>
+    <div class="form-group">
+      <label for="form-system">System</label>
+      <select id="form-system" onchange="onSystemChange()"></select>
+    </div>
+    <div id="kafka-fields" style="display:none">
+      <div class="form-group">
+        <label for="form-bootstrap">Bootstrap Servers</label>
+        <input type="text" id="form-bootstrap" placeholder="localhost:9092" />
+      </div>
+      <div class="form-group">
+        <label for="form-group-id">Group ID <span style="font-weight:400;text-transform:none">(optional)</span></label>
+        <input type="text" id="form-group-id" placeholder="pub-sub-tools-browser" />
+      </div>
+      <div class="form-group">
+        <label for="form-offset">Auto Offset Reset</label>
+        <select id="form-offset">
+          <option value="earliest">earliest</option>
+          <option value="latest">latest</option>
+        </select>
+      </div>
+    </div>
+    <div id="memory-fields" style="display:none">
+      <div class="form-group">
+        <label for="form-topics-json">Topics (JSON)</label>
+        <textarea id="form-topics-json" placeholder='{"orders": ["msg1","msg2"], "events": ["e1"]}'></textarea>
+        <div class="form-hint">Map of topic name → array of messages for local testing.</div>
+      </div>
+    </div>
+    <div class="form-error" id="form-error" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-add-conn')">Cancel</button>
+      <button class="btn btn-primary" id="add-conn-submit" onclick="submitAddConn()">Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+  /* ─── state ─────────────────────────────────────────── */
+  let activeConnId = null;
+  let activeTopic  = null;
+  let lastResult   = null;
+
+  /* ─── API base (same origin) ─────────────────────────── */
+  const API = '/api/v1';
+
+  /* ─── helpers ────────────────────────────────────────── */
+  async function apiFetch(path, opts = {}) {
+    const res = await fetch(API + path, {
+      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+      ...opts,
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body;
+  }
+
+  function toast(msg, isErr = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.background = isErr ? '#dc2626' : '#1e293b';
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ─── connections ────────────────────────────────────── */
+  async function loadConnections() {
+    try {
+      const data = await apiFetch('/connections');
+      renderConnections(data.connections);
+    } catch(e) {
+      toast('Failed to load connections: ' + e.message, true);
+    }
+  }
+
+  function renderConnections(conns) {
+    const el = document.getElementById('conn-list');
+    if (!conns.length) {
+      el.innerHTML = '<div class="empty-hint">No connections yet.<br/>Add one below.</div>';
+      return;
+    }
+    el.innerHTML = conns.map(c => `
+      <div class="conn-item ${c.id === activeConnId ? 'active' : ''}" data-conn-id="${esc(c.id)}" data-conn-system="${esc(c.system)}">
+        <div class="conn-info">
+          <div class="conn-system">${esc(c.system)}</div>
+          <div class="conn-id">${esc(c.id.slice(0,12))}…</div>
+        </div>
+        <button class="btn-icon" data-delete-conn="${esc(c.id)}" title="Remove connection">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div>`).join('');
+  }
+
+  async function selectConnection(id, system) {
+    activeConnId = id;
+    activeTopic  = null;
+    lastResult   = null;
+    // re-render sidebar highlight
+    document.querySelectorAll('.conn-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.connId === id);
+    });
+    // update topic panel
+    document.getElementById('refresh-topics-btn').style.display = '';
+    document.getElementById('msg-toolbar').style.display = 'none';
+    showMsgPlaceholder('Select a topic, then press Pull to view messages.');
+    await refreshTopics();
+  }
+
+  async function refreshTopics() {
+    if (!activeConnId) return;
+    const el = document.getElementById('topic-list');
+    el.innerHTML = '<div class="empty-hint"><span class="spinner"></span></div>';
+    try {
+      const data = await apiFetch(`/connections/${activeConnId}/topics`);
+      renderTopics(data.topics);
+    } catch(e) {
+      el.innerHTML = `<div class="empty-hint">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function renderTopics(topics) {
+    const el = document.getElementById('topic-list');
+    if (!topics.length) {
+      el.innerHTML = '<div class="empty-hint">No topics found.</div>';
+      return;
+    }
+    el.innerHTML = topics.map(t => `
+      <div class="topic-item ${t === activeTopic ? 'active' : ''}" data-topic="${esc(t)}">${esc(t)}</div>
+    `).join('');
+  }
+
+  function selectTopic(topic) {
+    activeTopic = topic;
+    document.querySelectorAll('.topic-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.topic === topic);
+    });
+    // show toolbar
+    const toolbar = document.getElementById('msg-toolbar');
+    toolbar.style.display = '';
+    document.getElementById('toolbar-topic-name').innerHTML =
+      `<span class="label">Topic&nbsp;/&nbsp;</span>${esc(topic)}`;
+    lastResult = null;
+    showMsgPlaceholder('Press Pull to fetch messages from this topic.');
+  }
+
+  async function deleteConnection(evt, id) {
+    evt.stopPropagation();
+    if (!confirm(`Remove connection ${id.slice(0,12)}…?`)) return;
+    try {
+      await apiFetch(`/connections/${id}`, { method: 'DELETE' });
+      toast('Connection removed.');
+      if (activeConnId === id) {
+        activeConnId = null;
+        activeTopic  = null;
+        lastResult   = null;
+        document.getElementById('topic-list').innerHTML =
+          '<div class="empty-hint">Select a connection to view topics.</div>';
+        document.getElementById('refresh-topics-btn').style.display = 'none';
+        document.getElementById('msg-toolbar').style.display = 'none';
+        showMsgPlaceholder('Select a connection and topic, then press Pull to view messages.');
+      }
+      loadConnections();
+    } catch(e) {
+      toast('Delete failed: ' + e.message, true);
+    }
+  }
+
+  /* ─── messages ───────────────────────────────────────── */
+  async function pullMessages() {
+    if (!activeConnId || !activeTopic) return;
+    const maxMessages = parseInt(document.getElementById('ctrl-max').value, 10) || 25;
+    const mode = document.getElementById('ctrl-mode').value;
+    const btn  = document.getElementById('pull-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:13px;height:13px;border-width:2px"></span> Pulling…';
+
+    try {
+      const data = await apiFetch(`/connections/${activeConnId}/messages/pull`, {
+        method: 'POST',
+        body: JSON.stringify({ topic: activeTopic, max_messages: maxMessages, mode }),
+      });
+      lastResult = data;
+      renderMessages(data);
+    } catch(e) {
+      toast('Pull failed: ' + e.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> Pull';
+    }
+  }
+
+  function renderMessages(data) {
+    const body = document.getElementById('msg-body');
+    const modeTag = `<span class="mode-tag ${data.mode}">${esc(data.mode)}</span>`;
+
+    if (!data.messages.length) {
+      body.innerHTML = `
+        <div class="results-bar">
+          <span class="count-text">0 messages returned ${modeTag}</span>
+        </div>
+        <div class="placeholder" style="height:auto;padding:40px 0">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <p style="color:var(--muted)">No messages in this topic.</p>
+        </div>`;
+      return;
+    }
+
+    const rows = data.messages.map((m, i) => {
+      const payloadStr = typeof m.payload === 'object'
+        ? JSON.stringify(m.payload, null, 2)
+        : String(m.payload ?? '');
+      const metaStr = JSON.stringify(m.metadata || {}, null, 2);
+      const payloadId = `payload-${i}`;
+      const metaId = `meta-${i}`;
+      return `
+        <tr>
+          <td class="msg-id">${esc(m.id)}</td>
+          <td>
+            <div class="msg-payload" id="${payloadId}">${esc(payloadStr)}</div>
+            <button class="expand-btn" data-cell-id="${payloadId}" data-expanded="false">expand</button>
+          </td>
+          <td>
+            <div class="msg-meta" id="${metaId}" style="max-height:60px;overflow:hidden">${esc(metaStr)}</div>
+            <button class="expand-btn" data-cell-id="${metaId}" data-expanded="false">expand</button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="results-bar">
+        <span class="count-text">${data.count} message${data.count === 1 ? '' : 's'} pulled ${modeTag}</span>
+      </div>
+      <table class="msg-table">
+        <thead>
+          <tr>
+            <th style="width:160px">ID</th>
+            <th>Payload</th>
+            <th style="width:220px">Metadata</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function toggleExpand(cellId, btn) {
+    const el = document.getElementById(cellId);
+    const expanded = btn.dataset.expanded === 'true';
+    if (expanded) {
+      el.style.maxHeight = cellId.startsWith('payload') ? '120px' : '60px';
+      el.style.overflowY = 'hidden';
+      btn.textContent = 'expand';
+      btn.dataset.expanded = 'false';
+    } else {
+      el.style.maxHeight = 'none';
+      el.style.overflowY = 'visible';
+      btn.textContent = 'collapse';
+      btn.dataset.expanded = 'true';
+    }
+  }
+
+  function showMsgPlaceholder(text) {
+    document.getElementById('msg-body').innerHTML = `
+      <div class="placeholder" id="msg-placeholder">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>${esc(text)}</p>
+      </div>`;
+  }
+
+  /* ─── add connection modal ───────────────────────────── */
+  let availableSystems = ['memory', 'kafka'];
+
+  async function openAddConn() {
+    document.getElementById('form-error').style.display = 'none';
+    document.getElementById('form-error').textContent = '';
+    try {
+      const data = await apiFetch('/systems');
+      availableSystems = data.systems;
+    } catch(_) { /* use defaults */ }
+
+    const sel = document.getElementById('form-system');
+    sel.innerHTML = availableSystems.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    onSystemChange();
+    document.getElementById('modal-add-conn').classList.add('open');
+  }
+
+  function onSystemChange() {
+    const sys = document.getElementById('form-system').value;
+    document.getElementById('kafka-fields').style.display  = sys === 'kafka'  ? '' : 'none';
+    document.getElementById('memory-fields').style.display = sys === 'memory' ? '' : 'none';
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+  }
+
+  async function submitAddConn() {
+    const errEl = document.getElementById('form-error');
+    errEl.style.display = 'none';
+
+    const system = document.getElementById('form-system').value;
+    let config = {};
+
+    if (system === 'kafka') {
+      const bootstrap = document.getElementById('form-bootstrap').value.trim();
+      if (!bootstrap) {
+        errEl.textContent = 'Bootstrap Servers is required.';
+        errEl.style.display = '';
+        return;
+      }
+      config.bootstrap_servers = bootstrap;
+      const gid = document.getElementById('form-group-id').value.trim();
+      if (gid) config.group_id = gid;
+      config.auto_offset_reset = document.getElementById('form-offset').value;
+    } else if (system === 'memory') {
+      const raw = document.getElementById('form-topics-json').value.trim();
+      if (raw) {
+        try {
+          config.topics = JSON.parse(raw);
+        } catch(_) {
+          errEl.textContent = 'Topics JSON is invalid.';
+          errEl.style.display = '';
+          return;
+        }
+      }
+    }
+
+    const btn = document.getElementById('add-conn-submit');
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+
+    try {
+      await apiFetch('/connections', { method: 'POST', body: JSON.stringify({ system, config }) });
+      closeModal('modal-add-conn');
+      toast('Connection added.');
+      loadConnections();
+    } catch(e) {
+      errEl.textContent = e.message;
+      errEl.style.display = '';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Connect';
+    }
+  }
+
+  /* close modal on overlay click */
+  document.getElementById('modal-add-conn').addEventListener('click', function(e) {
+    if (e.target === this) closeModal('modal-add-conn');
+  });
+
+  /* ─── event delegation: connections sidebar ──────────── */
+  document.getElementById('conn-list').addEventListener('click', function(e) {
+    const deleteBtn = e.target.closest('[data-delete-conn]');
+    if (deleteBtn) {
+      e.stopPropagation();
+      deleteConnection(e, deleteBtn.dataset.deleteConn);
+      return;
+    }
+    const connItem = e.target.closest('.conn-item');
+    if (connItem) {
+      selectConnection(connItem.dataset.connId, connItem.dataset.connSystem);
+    }
+  });
+
+  /* ─── event delegation: topics panel ────────────────── */
+  document.getElementById('topic-list').addEventListener('click', function(e) {
+    const topicItem = e.target.closest('.topic-item');
+    if (topicItem) selectTopic(topicItem.dataset.topic);
+  });
+
+  /* ─── event delegation: expand buttons in messages ───── */
+  document.querySelector('.messages-panel').addEventListener('click', function(e) {
+    const btn = e.target.closest('.expand-btn');
+    if (btn) toggleExpand(btn.dataset.cellId, btn);
+  });
+
+  /* ─── init ───────────────────────────────────────────── */
+  loadConnections();
+</script>
+</body>
+</html>
