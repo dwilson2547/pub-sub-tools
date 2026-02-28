@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  detect-changes:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      backlog-clearer: ${{ steps.filter.outputs.backlog-clearer }}
+      topic-browser: ${{ steps.filter.outputs.topic-browser }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backlog-clearer:
+              - 'backlog-clearer/**'
+            topic-browser:
+              - 'topic_browser/**'
+
+  release-backlog-clearer:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backlog-clearer == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Set release tag
+        id: vars
+        run: echo "tag=backlog-clearer-$(echo ${{ github.event.workflow_run.head_sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Backlog Clearer ${{ steps.vars.outputs.tag }}
+          target_commitish: ${{ github.event.workflow_run.head_sha }}
+          generate_release_notes: true
+
+  release-topic-browser:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.topic-browser == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Read chart version
+        id: version
+        run: |
+          APP_VERSION=$(grep appVersion topic_browser/helm/Chart.yaml | awk '{print $2}' | tr -d '"')
+          CHART_VERSION=$(grep '^version:' topic_browser/helm/Chart.yaml | awk '{print $2}')
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+          echo "chart_version=$CHART_VERSION" >> $GITHUB_OUTPUT
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: topic_browser
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/topic-browser:${{ steps.version.outputs.app_version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/topic-browser:latest
+      - uses: azure/setup-helm@v4
+      - name: Package and push helm chart
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          helm package topic_browser/helm
+          helm push "topic-browser-${{ steps.version.outputs.chart_version }}.tgz" \
+            oci://registry-1.docker.io/${DOCKERHUB_USERNAME}
