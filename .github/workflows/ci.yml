@@ -63,8 +63,7 @@ jobs:
     if: |
       always() &&
       needs.detect-changes.outputs.topic-browser == 'true' &&
-      needs.topic-browser-tests.result == 'success' &&
-      github.event_name == 'push'
+      needs.topic-browser-tests.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
